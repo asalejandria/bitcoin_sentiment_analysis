@@ -1,0 +1,152 @@
+import sys,json,pickle,nltk,numpy,twython,time,csv,datetime
+from time import sleep
+from datetime import datetime
+from hcde.twitter.Login import Login
+from hcde.twitter.Search import Search
+from hcde.twitter.auth_settings import *
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
+#
+term_list = ["#bitcoin", "#btc","#marijuana","#cannabis","#oil", "#gas"]
+term_list = ["#bitcoin", "#btc","#marijuana","#cannabis","#oil", "#gas"]
+#
+
+cal_senti_since_id_dict = {}
+def calculate_sentiment(termlist):
+    with open('sentiment_analysis.csv', 'a') as sentiment_analysis_file:
+        for term in range(len(termlist)):
+            app = "HCDE530Test01"
+            user = "otheralexa"
+            app_keys = TWITTER_APP_OAUTH_PAIR(app=app)
+            app_token_fname = TWITTER_APP_TOKEN_FNAME(app=app)
+            lg = Login(app_name=app, app_user=user, token_fname=app_token_fname)
+            lg.set_consumer_key(consumer_key=app_keys['consumer_key'])
+            lg.set_consumer_secret(consumer_secret=app_keys['consumer_secret'])
+            lg.login()
+            search = Search()
+            if cal_senti_since_id_dict.get(term_list[term]):
+                search.set_query_since_id(cal_senti_since_id_dict[term_list[term]])
+            search.set_auth_obj(obj=lg)
+            search.set_user_agent(agent="ie")
+            search.set_throttling(False)
+            search.set_page_size(sz=100)
+            search.set_query_lang(l="en")
+            search.set_query_result_type(rt="recent")
+            search.set_geocode(lat=39.8283, lon=98.5795, rad=2680, units="mi")
+            search.set_query_terms(termlist[term])
+            search.make_request()
+            response = search.get_message()
+            if response is not None:
+                print "* " + termlist[term] + " saved " + str(len(response)) + " tweets." + " *"
+                results = []
+                for tweet in response:
+                    if tweet["text"] not in results:
+                        results.append(tweet["text"])
+                positive_sentiment = []
+                neutral_sentiment = []
+                negative_sentiment = []
+                compound_sentiment = []
+                sid = SentimentIntensityAnalyzer()
+                for sentence in results:
+                    ss = sid.polarity_scores(sentence)
+                    if ss['compound'] != 0:
+                        positive_sentiment.append(ss['pos'])
+                        neutral_sentiment.append(ss['neu'])
+                        negative_sentiment.append(ss['neg'])
+                        compound_sentiment.append(ss['compound'])
+                    if ss['compound'] >= 0.9:
+                        print "A very positive tweet: " + "'" + sentence + "'"
+                    if ss['compound'] <= -0.9:
+                        print "A very negative tweet: " + "'" + sentence + "'"
+                average_positive_sentiment = numpy.mean(positive_sentiment)
+                average_neutral_sentiment = numpy.mean(neutral_sentiment)
+                average_negative_sentiment = numpy.mean(negative_sentiment)
+                average_compound_sentiment = numpy.mean(compound_sentiment)
+                print str(len(positive_sentiment)) + " were analyzed for sentiment."
+                print "The average positive sentiment is: " + str(average_positive_sentiment)
+                print "The average neutral sentiment is: " + str(average_neutral_sentiment)
+                print "The average negative sentiment is: " + str(average_negative_sentiment)
+                print "The average compound sentiment is: " + str(average_compound_sentiment)
+                print "\n"
+                results2 = []
+                d = {}
+                d['term'] = termlist[term]
+                d['datetime'] = str(datetime.now())
+                d['positive_sentiment'] = average_positive_sentiment
+                d['neutral_sentiment'] = average_neutral_sentiment
+                d['negative_sentiment'] = average_negative_sentiment
+                d['compound_sentiment'] = average_compound_sentiment
+                results2.append(d)
+                for sentiments in results2:
+                    sentiment_writer = csv.DictWriter(sentiment_analysis_file, fieldnames=['term','datetime','positive_sentiment', 'neutral_sentiment', 'negative_sentiment','compound_sentiment'])
+                    sentiment_writer.writerow(sentiments)
+                cal_senti_since_id_dict[term_list[term]] = response[0]['id_str']
+
+save_tweets_since_id_dict = {}
+def save_tweets(termlist):
+    with open('saved_tweets.csv', 'a') as saved_tweets_file:
+        for topic in range(len(termlist)):
+            app = "HCDE530Test01"
+            user = "otheralexa"
+            app_keys = TWITTER_APP_OAUTH_PAIR(app=app)
+            app_token_fname = TWITTER_APP_TOKEN_FNAME(app=app)
+            lg = Login(app_name=app, app_user=user, token_fname=app_token_fname)
+            lg.set_consumer_key(consumer_key=app_keys['consumer_key'])
+            lg.set_consumer_secret(consumer_secret=app_keys['consumer_secret'])
+            lg.login()
+            search = Search()
+            # Set the query since_id of the term if it is present in the dict
+            if save_tweets_since_id_dict.get(term_list[topic]):
+                search.set_query_since_id(save_tweets_since_id_dict[term_list[topic]])
+            search.set_auth_obj(obj=lg)
+            search.set_user_agent(agent="ie")
+            search.set_throttling(False)
+            search.set_page_size(sz=100)
+            search.set_query_lang(l="en")
+            search.set_query_result_type(rt="recent")
+            search.set_geocode(lat=39.8283, lon=98.5795, rad=2680, units="mi")
+            search.set_query_terms(term_list[topic])
+            search.make_request()
+            response = search.get_message()
+            if response is not None:
+                results = []
+                for tweet in response:
+                    d = {}
+                    d['topic'] = termlist[topic].encode("utf-8")
+                    d['datetime'] = str(datetime.now())
+                    d['id_str'] = tweet['id_str'].encode("utf-8")
+                    d['created_at'] = tweet['created_at'].encode("utf-8")
+                    d['text'] = tweet['text'].encode("utf-8")
+                    results.append(d)
+                for tweet in results:
+                    tweet_saver_writer = csv.DictWriter(saved_tweets_file, fieldnames=['topic','datetime','id_str', 'created_at', 'text'])
+                    tweet_saver_writer.writerow(tweet)
+                # Update the since_id of the term in the dict with the latest tweet's id
+                save_tweets_since_id_dict[term_list[topic]] = response[0]['id_str']
+
+def run_fifteen_times():
+    num_requests = 1
+    while num_requests < 16:
+        print "*** REQUEST #:" + str(num_requests) + " ***"
+        print "\n"
+        num_requests += 1
+        calculate_sentiment(term_list)
+        save_tweets(term_list)
+        sleep(60)
+
+run_fifteen_times()
+
+# def run_four_times_daily():
+#     run_count = 1
+#     while run_count < 5:
+#         print "*** RUN COUNT #:" + str(run_count) + " ***"
+#         print "\n"
+#         run_count += 1
+#         run_fifteen_times()
+#         print "Sleeping for 2 hours."
+#         for i in xrange(7200,0,-1):
+#             sleep(1)
+#             print str(i) + " seconds remaining."
+#         sleep(7200)
+#
+#
+# run_four_times_daily()
