@@ -1,0 +1,15 @@
+def run_four_times_daily():
+    run_count = 1
+    while run_count < 5:
+        print "*** RUN COUNT #:" + str(run_count) + " ***"
+        print "\n"
+        run_count += 1
+        run_fifteen_times()
+        print "Sleeping for 2 hours."
+        for i in xrange(7200,0,-1):
+            sleep(1)
+            print str(i) + " seconds remaining."
+        sleep(7200)
+
+
+run_four_times_daily()
